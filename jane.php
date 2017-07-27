@@ -17,6 +17,7 @@ if (isset($options["cc"])){
 	$dateTwo=$months[$month]." $days_of_month del ".$year;
 
 	$currentDate=$days[date('w')]." ".date('d')." de ".$months[date('n')]. " - ".date('Y');
+	# Get Template
 	$templateId = getenv('TEMPLATE_ID');
 	$response = $service->files->export($templateId,'application/vnd.oasis.opendocument.text', array(
 		  'alt' => 'media' ));
@@ -24,12 +25,6 @@ if (isset($options["cc"])){
 	$fileTemplate=fopen("/tmp/template.odt","a") or die("Problemas en la creacion");
 	fputs($fileTemplate,$content);
 	fclose($fileTemplate);
-	# Horas
-	$receivable=getenv('RECEIVABLE');
-	$receivableOnText=NumeroALetras::convertir($receivable);
-	$receivable=number_format($receivable);
-	$in=exec('./combiner.sh "'.$month.'" "'.$currentDate.'" "'.$dateOne.'" "'.$dateTwo.'" "'.$receivableOnText.'" "'.$receivable.'"',$out);
-
 	$pageToken = null;
 	do {
 		$response = $service->files->listFiles(array(
@@ -84,6 +79,42 @@ if (isset($options["cc"])){
 		'name' => "$title.pdf",
 		'parents' => array($monthFolderId)
 	));
+	# Get SS
+	do {
+		$response = $service->files->listFiles(array(
+			'q' => "trashed=false and '$monthFolderId' in parents",
+			'orderBy' => 'createdTime desc',
+			'corpus' => 'user',
+			'fields' => 'files(id,name)'
+		));
+		foreach ($response->getFiles() as $file) {
+				if ($file->name=="SS - ".$months[$month]."/$year.pdf"){
+					$response = $service->files->get($file->id, array(
+		  'alt' => 'media' ));
+					$content = $response->getBody()->getContents();
+					$fileSs=fopen("/tmp/SS.pdf","a") or die("Problemas en la creacion");
+					fputs($fileSs,$content);
+					fclose($fileSs);
+					$text=\Spatie\PdfToText\Pdf::getText('/tmp/SS.pdf');
+					$ub=strpos($text,'TIPO DE PLANILLA');
+					$ss=substr($text,$ub-10,10); 
+					break;
+				}
+		}
+	} while ($pageToken != null);
+	# Horas
+	$receivable=getenv('RECEIVABLE');
+	$receivableOnText=NumeroALetras::convertir($receivable);
+	$receivable=number_format($receivable);
+	$in=exec('./combiner.sh "'.$month.'" "'.$currentDate.'" "'.$dateOne.'" "'.$dateTwo.'" "'.$receivableOnText.'" "'.$receivable.'" "'.$ss.'" "'.$months[$month].'"',$out);
+
+	$templateId = getenv('TEMPLATE_ID');
+	$response = $service->files->export($templateId,'application/vnd.oasis.opendocument.text', array(
+		  'alt' => 'media' ));
+	$content = $response->getBody()->getContents();
+	$fileTemplate=fopen("/tmp/template.odt","a") or die("Problemas en la creacion");
+	fputs($fileTemplate,$content);
+	fclose($fileTemplate);
 	$content = file_get_contents("/tmp/charge_account.pdf");
 	$file = $service->files->create($fileMetadata, array(
 		'data' => $content,
