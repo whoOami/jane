@@ -8,7 +8,7 @@ if (isset($options["cc"])){
 	if ($options["cc"])
 		$month=$options["cc"];
 	else
-		$month=date("n");
+		$month=date("n")-1;
 
 	$year=date("Y");
 	$days_of_month=date("d",mktime(0,0,0,$month+1,0,$year));
@@ -74,12 +74,13 @@ if (isset($options["cc"])){
 			'fields' => 'id'));
 		$monthFolderId = $file->id;
 	}
-	$title="CC - ".$months[$month]."/$year";
+	$subject="CC - ".$months[$month]."/$year";
 	$fileMetadata = new Google_Service_Drive_DriveFile(array(
-		'name' => "$title.pdf",
+		'name' => "$subject.pdf",
 		'parents' => array($monthFolderId)
 	));
 	# Get SS
+	$pageToken=null;
 	do {
 		$response = $service->files->listFiles(array(
 			'q' => "trashed=false and '$monthFolderId' in parents",
@@ -121,6 +122,26 @@ if (isset($options["cc"])){
 		'mimeType' => 'application/pdf',
 		'uploadType' => 'multipart',
 		'fields' => 'id'));
-	echo $title;
+	$client = getClient();
+	$service = new Google_Service_Sheets($client);
+	$spreadsheetId = '1sh-Ud1iZX0ZEqWrsNfcdU2nLufCtlv0k_gubqvr-Ti0';
+	$page=$months[$month];
+	$range = "$page!A2";
+	$response = $service->spreadsheets_values->get($spreadsheetId, $range);
+	$values = $response->getValues();
+	$lending=number_format($values[0][0]);
+	$to = getenv('BOSS_EMAIL');
+	$sender=array(
+		'to'=>$to,
+		'subject'=>$subject,
+		'body'=>"Total adelantos: $$lending",
+		'attach'=>
+		[
+			'/tmp/charge_account.pdf',
+			'/tmp/SS.pdf',
+		]
+
+	);
+	include('sender/sender.php');
 }
 ?>
